@@ -1,0 +1,16 @@
+[project]
+name = "ordering-voice-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles>=25.1.0",
+    "fastapi>=0.141.1",
+    "langsmith[pipecat]>=0.10.15",
+    "pipecat-ai[anthropic,local,openai,silero,tracing,websocket]>=1.7.0",
+    "pyaudio>=0.2.14",
+    "pydantic-settings>=2.14.2",
+    "python-dotenv>=1.2.2",
+    "uvicorn>=0.52.1",
+]
