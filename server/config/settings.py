@@ -24,7 +24,8 @@ class Settings(BaseSettings):
 
     # Voice Agent Models
     STT_MODEL: str = "whisper-1"
-    LLM_MODEL: str = "claude-haiku-4-5"
+    # LLM_MODEL: str = "claude-haiku-4-5"
+    LLM_MODEL: str = "gpt-4o"
     TTS_MODEL: str = "tts-1"
     TTS_VOICE: str = "alloy"
 

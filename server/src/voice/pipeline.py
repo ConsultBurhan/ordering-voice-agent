@@ -59,6 +59,7 @@ from pipecat.transports.smallwebrtc.transport import (
     SmallWebRTCTransport,
     TransportParams,
 )
+from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.workers.runner import WorkerRunner
 from config.logger import get_logger
 from config.settings import get_settings
@@ -170,15 +171,25 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         ),
     )
 
-    # -- LLM (Anthropic Claude) ---------------------------------------------
-    llm = AnthropicLLMService(
-        api_key=settings.ANTHROPIC_API_KEY,
-        settings=AnthropicLLMSettings(
-            model=settings.LLM_MODEL,
-            system_instruction=SYSTEM_PROMPT,
-            max_tokens=256,
-        ),
-    )
+    # # -- LLM (Anthropic Claude) ---------------------------------------------
+    # llm = AnthropicLLMService(
+    #     api_key=settings.ANTHROPIC_API_KEY,
+    #     settings=AnthropicLLMSettings(
+    #         model=settings.LLM_MODEL,
+    #         system_instruction=SYSTEM_PROMPT,
+    #         max_tokens=256,
+    #     ),
+    # )
+    llm = OpenAILLMService(
+    api_key=settings.OPENAI_API_KEY,
+    settings=OpenAILLMService.Settings(
+        model=settings.LLM_MODEL,
+        temperature=0.7,
+        max_tokens=256,
+        frequency_penalty=0.5,
+        system_instruction=SYSTEM_PROMPT
+    ),
+)
 
     # -- TTS (ElevenLabs TTS) --------------------------------------------------
     tts = ElevenLabsTTSService(

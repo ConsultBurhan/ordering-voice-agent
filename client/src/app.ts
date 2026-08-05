@@ -9,7 +9,6 @@ import {
   TransportState,
 } from '@pipecat-ai/client-js';
 import { Avatar } from './components/Avatar';
-import { OrderCart } from './components/OrderCart';
 import { Visualizer } from './components/Visualizer';
 
 class VoiceOrderingKioskApp {
@@ -24,7 +23,6 @@ class VoiceOrderingKioskApp {
   private emptyState: HTMLElement | null = null;
 
   private avatar!: Avatar;
-  private cart!: OrderCart;
   private visualizer!: Visualizer;
 
   private declare pcClient: PipecatClient;
@@ -49,9 +47,6 @@ class VoiceOrderingKioskApp {
 
   private initializeComponents(): void {
     this.avatar = new Avatar('avatar-container-root');
-    this.cart = new OrderCart('cart-container-root', (item) => {
-      this.avatar.triggerSuccessGesture(item.name);
-    });
     this.visualizer = new Visualizer('visualizer-root', 28);
   }
 
@@ -102,14 +97,12 @@ class VoiceOrderingKioskApp {
           if (transcript.final) {
             this.log(`User transcript: ${transcript.text}`);
             this.addTranscriptBubble('user', transcript.text);
-            this.cart.parseTranscript(transcript.text);
           }
         },
         onBotOutput: (data: BotOutputData) => {
           if (data.aggregated_by === AggregationType.SENTENCE) {
             this.log(`Bot output: ${data.text}`);
             this.addTranscriptBubble('bot', data.text);
-            this.cart.parseTranscript(data.text);
           }
         },
         onTrackStarted: (
@@ -147,18 +140,6 @@ class VoiceOrderingKioskApp {
   private setupDOMEventListeners(): void {
     this.connectBtn.addEventListener('click', () => this.start());
     this.disconnectBtn.addEventListener('click', () => this.stop());
-
-    // Prompt Chips Listener
-    document.querySelectorAll('.prompt-chip').forEach((chip) => {
-      chip.addEventListener('click', (e) => {
-        const promptText = (e.currentTarget as HTMLElement).getAttribute('data-prompt');
-        if (promptText) {
-          this.log(`Quick prompt triggered: "${promptText}"`);
-          this.cart.parseTranscript(promptText);
-          this.addTranscriptBubble('user', promptText);
-        }
-      });
-    });
   }
 
   private setStatusBadgeState(state: 'disconnected' | 'connected' | 'user-speaking' | 'bot-speaking', label: string) {
