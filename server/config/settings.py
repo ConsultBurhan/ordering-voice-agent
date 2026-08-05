@@ -20,10 +20,11 @@ class Settings(BaseSettings):
     # API Keys
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    ELEVENLABS_API_KEY: str = ""
 
     # Voice Agent Models
     STT_MODEL: str = "whisper-1"
-    LLM_MODEL: str = "claude-sonnet-4-5"
+    LLM_MODEL: str = "claude-haiku-4-5"
     TTS_MODEL: str = "tts-1"
     TTS_VOICE: str = "alloy"
 

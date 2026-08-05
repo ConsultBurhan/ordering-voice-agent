@@ -1,4 +1,4 @@
-import { WebSocketTransport } from '@pipecat-ai/websocket-transport';
+import { SmallWebRTCTransport } from '@pipecat-ai/small-webrtc-transport';
 import {
   AggregationType,
   BotOutputData,
@@ -8,8 +8,11 @@ import {
   TranscriptData,
   TransportState,
 } from '@pipecat-ai/client-js';
+import { Avatar } from './components/Avatar';
+import { OrderCart } from './components/OrderCart';
+import { Visualizer } from './components/Visualizer';
 
-class WebSocketApp {
+class VoiceOrderingKioskApp {
   private declare connectBtn: HTMLButtonElement;
   private declare disconnectBtn: HTMLButtonElement;
   private declare botAudioElement: HTMLAudioElement;
@@ -17,10 +20,12 @@ class WebSocketApp {
   private debugLog: HTMLElement | null = null;
   private statusSpan: HTMLElement | null = null;
   private statusBadge: HTMLElement | null = null;
-  private voiceOrb: HTMLElement | null = null;
-  private stateCaption: HTMLElement | null = null;
   private transcriptBox: HTMLElement | null = null;
   private emptyState: HTMLElement | null = null;
+
+  private avatar!: Avatar;
+  private cart!: OrderCart;
+  private visualizer!: Visualizer;
 
   private declare pcClient: PipecatClient;
 
@@ -31,6 +36,7 @@ class WebSocketApp {
   constructor() {
     this.setupEnvironmentVariables();
     this.setupDOMElements();
+    this.initializeComponents();
     this.setupDOMEventListeners();
     this.initializePipecatClient();
   }
@@ -41,9 +47,17 @@ class WebSocketApp {
     this.apiKey = import.meta.env.VITE_PIPECAT_PUBLIC_API;
   }
 
+  private initializeComponents(): void {
+    this.avatar = new Avatar('avatar-container-root');
+    this.cart = new OrderCart('cart-container-root', (item) => {
+      this.avatar.triggerSuccessGesture(item.name);
+    });
+    this.visualizer = new Visualizer('visualizer-root', 28);
+  }
+
   private initializePipecatClient(): void {
     const opts: PipecatClientOptions = {
-      transport: new WebSocketTransport(),
+      transport: new SmallWebRTCTransport(),
       enableMic: true,
       enableCam: false,
       callbacks: {
@@ -54,38 +68,48 @@ class WebSocketApp {
           this.onConnectedHandler();
         },
         onBotReady: () => {
-          this.log('Bot is ready.');
-          this.setOrbState('connected', 'Bot ready — speak into mic');
+          this.log('Bot is ready to take orders.');
+          this.avatar.setState('connected', 'Voice Assistant Ready — Speak your order!');
         },
         onDisconnected: () => {
           this.onDisconnectedHandler();
         },
         onUserStartedSpeaking: () => {
           this.log('User started speaking.');
-          this.setOrbState('user-speaking', 'Listening to you...');
+          this.avatar.setState('user-speaking');
+          this.visualizer.setMode('user');
+          this.setStatusBadgeState('user-speaking', 'Listening to order...');
         },
         onUserStoppedSpeaking: () => {
           this.log('User stopped speaking.');
-          this.setOrbState('connected', 'Processing...');
+          this.avatar.setState('processing');
+          this.visualizer.setMode('idle');
+          this.setStatusBadgeState('connected', 'Processing order...');
         },
         onBotStartedSpeaking: () => {
           this.log('Bot started speaking.');
-          this.setOrbState('bot-speaking', 'Agent speaking...');
+          this.avatar.setState('bot-speaking');
+          this.visualizer.setMode('bot');
+          this.setStatusBadgeState('bot-speaking', 'Assistant speaking...');
         },
         onBotStoppedSpeaking: () => {
           this.log('Bot stopped speaking.');
-          this.setOrbState('connected', 'Listening...');
+          this.avatar.setState('connected');
+          this.visualizer.setMode('idle');
+          this.setStatusBadgeState('connected', 'Order Assistant Ready');
         },
         onUserTranscript: (transcript: TranscriptData) => {
           if (transcript.final) {
             this.log(`User transcript: ${transcript.text}`);
             this.addTranscriptBubble('user', transcript.text);
+            this.cart.parseTranscript(transcript.text);
           }
         },
         onBotOutput: (data: BotOutputData) => {
           if (data.aggregated_by === AggregationType.SENTENCE) {
             this.log(`Bot output: ${data.text}`);
             this.addTranscriptBubble('bot', data.text);
+            this.cart.parseTranscript(data.text);
           }
         },
         onTrackStarted: (
@@ -101,6 +125,7 @@ class WebSocketApp {
         },
       },
     };
+
     this.pcClient = new PipecatClient(opts);
     // @ts-ignore
     window.webapp = this;
@@ -115,8 +140,6 @@ class WebSocketApp {
     this.statusSpan = document.getElementById('connection-status');
     this.statusBadge = document.getElementById('status-badge');
     this.botAudioElement = document.getElementById('bot-audio') as HTMLAudioElement;
-    this.voiceOrb = document.getElementById('voice-orb');
-    this.stateCaption = document.getElementById('state-caption');
     this.transcriptBox = document.getElementById('transcript-box');
     this.emptyState = document.getElementById('empty-state');
   }
@@ -124,6 +147,24 @@ class WebSocketApp {
   private setupDOMEventListeners(): void {
     this.connectBtn.addEventListener('click', () => this.start());
     this.disconnectBtn.addEventListener('click', () => this.stop());
+
+    // Prompt Chips Listener
+    document.querySelectorAll('.prompt-chip').forEach((chip) => {
+      chip.addEventListener('click', (e) => {
+        const promptText = (e.currentTarget as HTMLElement).getAttribute('data-prompt');
+        if (promptText) {
+          this.log(`Quick prompt triggered: "${promptText}"`);
+          this.cart.parseTranscript(promptText);
+          this.addTranscriptBubble('user', promptText);
+        }
+      });
+    });
+  }
+
+  private setStatusBadgeState(state: 'disconnected' | 'connected' | 'user-speaking' | 'bot-speaking', label: string) {
+    if (!this.statusBadge || !this.statusSpan) return;
+    this.statusBadge.className = `status-badge ${state}`;
+    this.statusSpan.textContent = label;
   }
 
   private log(message: string): void {
@@ -143,33 +184,6 @@ class WebSocketApp {
     if (this.debugLog) this.debugLog.innerText = '';
   }
 
-  private setOrbState(state: 'disconnected' | 'connected' | 'user-speaking' | 'bot-speaking', caption: string) {
-    if (!this.voiceOrb || !this.stateCaption || !this.statusBadge) return;
-    
-    this.voiceOrb.className = 'orb';
-    this.statusBadge.className = 'status-badge';
-
-    if (state === 'connected') {
-      this.voiceOrb.classList.add('state-connected');
-      this.statusBadge.classList.add('connected');
-    } else if (state === 'user-speaking') {
-      this.voiceOrb.classList.add('state-user-speaking');
-      this.statusBadge.classList.add('user-speaking');
-    } else if (state === 'bot-speaking') {
-      this.voiceOrb.classList.add('state-bot-speaking');
-      this.statusBadge.classList.add('speaking');
-    }
-
-    this.stateCaption.textContent = caption;
-  }
-
-  private updateStatus(status: string): void {
-    if (this.statusSpan) {
-      this.statusSpan.textContent = status;
-    }
-    this.log(`Status: ${status}`);
-  }
-
   private addTranscriptBubble(role: 'user' | 'bot', text: string): void {
     if (!this.transcriptBox) return;
 
@@ -185,17 +199,18 @@ class WebSocketApp {
   }
 
   private onConnectedHandler() {
-    this.updateStatus('Connected');
+    this.setStatusBadgeState('connected', 'Connected');
     if (this.connectBtn) this.connectBtn.disabled = true;
     if (this.disconnectBtn) this.disconnectBtn.disabled = false;
-    this.setOrbState('connected', 'Connected — Waiting for bot');
+    this.avatar.setState('connected');
   }
 
   private onDisconnectedHandler() {
-    this.updateStatus('Disconnected');
+    this.setStatusBadgeState('disconnected', 'Offline');
     if (this.connectBtn) this.connectBtn.disabled = false;
     if (this.disconnectBtn) this.disconnectBtn.disabled = true;
-    this.setOrbState('disconnected', 'Click Connect to Start');
+    this.avatar.setState('disconnected');
+    this.visualizer.setMode('idle');
   }
 
   private onBotTrackStarted(track: MediaStreamTrack) {
@@ -206,36 +221,27 @@ class WebSocketApp {
 
   private async start(): Promise<void> {
     this.clearAllLogs();
-    this.setOrbState('connected', 'Connecting device & bot...');
+    this.avatar.setState('processing', 'Connecting device & voice bot...');
     await this.pcClient.initDevices();
     this.connectBtn.disabled = true;
     try {
-      this.updateStatus('Starting bot session...');
+      this.setStatusBadgeState('connected', 'Starting Session...');
       const headers = new Headers();
       if (this.apiKey) {
         headers.append("Authorization", `Bearer ${this.apiKey}`);
       }
 
-      const startBotResponseTransformerWebsocket = ({ token, wsUrl }: {
-        wsUrl: string;
-        token?: string;
-      }) => {
-        return {
-          wsUrl: token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl,
-        };
-      };
-
       const startBotResult = await this.pcClient.startBot({
         endpoint: this.startUrl,
         headers: headers,
         requestData: {
-          transport: "websocket"
+          createDailyRoom: false,
+          enableDefaultIceServers: true,
+          transport: "webrtc"
         }
       });
-      
-      // @ts-ignore
-      const wsConnectionParams = startBotResponseTransformerWebsocket(startBotResult);
-      await this.pcClient.connect(wsConnectionParams);
+
+      await this.pcClient.connect(startBotResult as any);
     } catch (e) {
       console.error(`Failed to connect ${e}`);
       this.stop();
@@ -248,4 +254,4 @@ class WebSocketApp {
   }
 }
 
-const websocketApp = new WebSocketApp();
+new VoiceOrderingKioskApp();

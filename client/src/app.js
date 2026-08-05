@@ -1,4 +1,4 @@
-import { WebSocketTransport } from '@pipecat-ai/websocket-transport';
+import { SmallWebRTCTransport } from '@pipecat-ai/small-webrtc-transport';
 import { AggregationType, PipecatClient, } from '@pipecat-ai/client-js';
 class WebSocketApp {
     debugLog = null;
@@ -21,7 +21,7 @@ class WebSocketApp {
     }
     initializePipecatClient() {
         const opts = {
-            transport: new WebSocketTransport(),
+            transport: new SmallWebRTCTransport(),
             enableMic: true,
             enableCam: false,
             callbacks: {
@@ -159,7 +159,7 @@ class WebSocketApp {
             this.connectBtn.disabled = true;
         if (this.disconnectBtn)
             this.disconnectBtn.disabled = false;
-        this.setOrbState('connected', 'Connected — Waiting for bot');
+        this.setOrbState('connected', 'Bot ready — speak into mic');
     }
     onDisconnectedHandler() {
         this.updateStatus('Disconnected');
@@ -185,21 +185,17 @@ class WebSocketApp {
             if (this.apiKey) {
                 headers.append("Authorization", `Bearer ${this.apiKey}`);
             }
-            const startBotResponseTransformerWebsocket = ({ token, wsUrl }) => {
-                return {
-                    wsUrl: token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl,
-                };
-            };
             const startBotResult = await this.pcClient.startBot({
                 endpoint: this.startUrl,
                 headers: headers,
                 requestData: {
-                    transport: "websocket"
+                    // SmallWebRTC connects directly peer-to-peer (no Daily room needed)
+                    createDailyRoom: false,
+                    enableDefaultIceServers: true,
+                    transport: "webrtc"
                 }
             });
-            // @ts-ignore
-            const wsConnectionParams = startBotResponseTransformerWebsocket(startBotResult);
-            await this.pcClient.connect(wsConnectionParams);
+            await this.pcClient.connect(startBotResult);
         }
         catch (e) {
             console.error(`Failed to connect ${e}`);

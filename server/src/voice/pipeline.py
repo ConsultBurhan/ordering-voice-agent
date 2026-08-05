@@ -45,24 +45,36 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from pipecat.runner.types import RunnerArguments
-from pipecat.runner.utils import create_transport
+from pipecat.runner.types import RunnerArguments, SmallWebRTCRunnerArguments
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
 from pipecat.services.openai.stt import OpenAISTTService
 from pipecat.services.openai.tts import OpenAITTSService
 from pipecat.transports.base_transport import BaseTransport
-from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
+from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
+from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService, CommitStrategy
+from pipecat.services.elevenlabs.stt import ElevenLabsSTTService
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from pipecat.transports.smallwebrtc.transport import (
+    SmallWebRTCTransport,
+    TransportParams,
+)
 from pipecat.workers.runner import WorkerRunner
-
 from config.logger import get_logger
 from config.settings import get_settings
 from src.voice.latency import LatencyTracker
 from src.voice.system_prompt import SYSTEM_PROMPT
+from langsmith.integrations.pipecat import configure_pipecat, set_thread_id
 
+# Load env vars first so LANGSMITH_* variables are available when configure_pipecat() runs
 load_dotenv(override=True)
 
 app_logger = get_logger(__name__)
+
+# Install the LangSmith tracer and span processor once at startup.
+# Each conversation gets its own thread via set_thread_id() inside run_bot().
+configure_pipecat()
+
 
 
 # ---------------------------------------------------------------------------
@@ -111,26 +123,18 @@ class LatencyObserver(FrameProcessor):
 
         await self.push_frame(frame, direction)
 
-
-class RawFrameLogger(FrameProcessor):
-    async def process_frame(self, frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-        app_logger.info(f"🔍 RAW FRAME: {type(frame).__name__} dir={direction}")
-        await self.push_frame(frame, direction)
-
-
 # ---------------------------------------------------------------------------
 # Transport params for Pipecat runner
 # ---------------------------------------------------------------------------
 
-transport_params = {
-    "websocket": lambda: FastAPIWebsocketParams(
-        audio_in_enabled=True,
-        audio_out_enabled=True,
-        add_wav_header=False,
-        serializer=ProtobufFrameSerializer(),
-    ),
-}
+# transport_params = {
+#     "websocket": lambda: FastAPIWebsocketParams(
+#         audio_in_enabled=True,
+#         audio_out_enabled=True,
+#         add_wav_header=False,
+#         serializer=ProtobufFrameSerializer(),
+#     ),
+# }
 
 
 # ---------------------------------------------------------------------------
@@ -145,14 +149,24 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         transport (BaseTransport): The transport to use for communication.
         runner_args: runner session arguments
     """
+    import uuid
+    # A unique ID per conversation — groups all pipeline spans into one LangSmith thread.
+    conversation_id = str(uuid.uuid4())
+    set_thread_id(conversation_id)
+    app_logger.info(f"🔗 LangSmith thread: {conversation_id}")
+
     settings = get_settings()
     tracker = LatencyTracker()
 
-    # -- STT (OpenAI Whisper) -----------------------------------------------
-    stt = OpenAISTTService(
-        api_key=settings.OPENAI_API_KEY,
-        settings=OpenAISTTService.Settings(
-            model=settings.STT_MODEL,
+    # -- STT (Eleven Labs) -----------------------------------------------
+    stt = ElevenLabsRealtimeSTTService(
+        api_key=settings.ELEVENLABS_API_KEY,
+        language_code="eng",
+        commit_strategy=CommitStrategy.VAD,
+        include_timestamps=True,
+        settings=ElevenLabsRealtimeSTTService.Settings(
+            vad_silence_threshold_secs=0.8,
+            vad_threshold=0.6
         ),
     )
 
@@ -166,12 +180,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         ),
     )
 
-    # -- TTS (OpenAI TTS) --------------------------------------------------
-    tts = OpenAITTSService(
-        api_key=settings.OPENAI_API_KEY,
-        settings=OpenAITTSService.Settings(
-            voice=settings.TTS_VOICE,
-            model=settings.TTS_MODEL,
+    # -- TTS (ElevenLabs TTS) --------------------------------------------------
+    tts = ElevenLabsTTSService(
+        api_key=settings.ELEVENLABS_API_KEY,
+        settings=ElevenLabsTTSService.Settings(
+            voice="21m00Tcm4TlvDq8ikWAM",  # Rachel
         ),
     )
 
@@ -230,7 +243,8 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         app_logger.info("Pipecat Client connected")
-
+      
+      
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         app_logger.info("Pipecat Client disconnected — cancelling worker")
@@ -245,6 +259,14 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
 async def bot(runner_args: RunnerArguments):
     """Main bot entry point compatible with Pipecat Cloud."""
-    transport = await create_transport(runner_args, transport_params)
+    webrtc_connection: SmallWebRTCConnection = runner_args.webrtc_connection
+
+    transport = SmallWebRTCTransport(
+        webrtc_connection=webrtc_connection,
+        params=TransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+        ),
+    )
     await run_bot(transport, runner_args)
 
