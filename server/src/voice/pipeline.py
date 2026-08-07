@@ -2,7 +2,7 @@
 Pipecat pipeline using the built-in Pipecat runner server.
 
 Pipeline:
-  transport.input() → raw_logger → latency_pre → STT → agg.user() → latency_mid → LLM → TTS → latency_post → transport.output() → agg.assistant()
+  transport.input() → STT → agg.user() → LLM → menu_sync → TTS → transport.output() → agg.assistant()
 
 Services:
   STT: ElevenLabs Realtime (streaming transcripts)
@@ -64,7 +64,6 @@ from pipecat.workers.runner import WorkerRunner
 from langsmith.integrations.pipecat import configure_pipecat, set_thread_id
 from config.logger import get_logger
 from config.settings import get_settings
-from src.voice.latency import LatencyTracker
 from src.food_ordering_flow.menu import get_menu_payload
 from src.food_ordering_flow.nodes import create_welcome_node
 from src.food_ordering_flow.state import initial_state
@@ -78,53 +77,6 @@ app_logger = get_logger(__name__)
 # Install the LangSmith tracer and span processor once at startup.
 # Each conversation gets its own thread via set_thread_id() inside run_bot().
 configure_pipecat()
-
-
-# ---------------------------------------------------------------------------
-# Frame observer processors
-# ---------------------------------------------------------------------------
-
-
-class LatencyObserver(FrameProcessor):
-    """
-    Inline latency observer injected into the pipeline.
-    Observes frames passing through to stamp timestamps and log transcriptions:
-      - VAD end-of-utterance (UserStoppedSpeakingFrame)
-      - First STT partial & transcribed text (TranscriptionFrame)
-      - First LLM text token (LLMTextFrame)
-      - First TTS audio chunk (AudioRawFrame)
-    """
-
-    def __init__(self, tracker: LatencyTracker, **kwargs):
-        super().__init__(**kwargs)
-        self._tracker = tracker
-        self._first_audio_seen = False
-
-    async def process_frame(self, frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-
-        if isinstance(frame, UserStoppedSpeakingFrame):
-            app_logger.info("🗣️ User Stopped Speaking")
-            self._first_audio_seen = False
-            self._tracker.start_turn()
-
-        elif isinstance(frame, TranscriptionFrame):
-            app_logger.info(f"🗣️ User Said: '{frame.text}'")
-            if self._tracker.current:
-                self._tracker.current.record_stt_partial()
-
-        elif isinstance(frame, LLMTextFrame):
-            app_logger.info(f"🧠 LLM Said: '{frame.text}'")
-            if self._tracker.current:
-                self._tracker.current.record_llm_token()
-
-        elif isinstance(frame, AudioRawFrame) and not self._first_audio_seen:
-            app_logger.info("🔊 TTS Audio Chunk Received")
-            self._first_audio_seen = True
-            if self._tracker.current:
-                self._tracker.current.record_tts_chunk()
-
-        await self.push_frame(frame, direction)
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +97,6 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     app_logger.info(f"🔗 LangSmith thread: {conversation_id}")
 
     settings = get_settings()
-    tracker = LatencyTracker()
 
     # -- STT (ElevenLabs Realtime) -----------------------------------------------
     stt = ElevenLabsRealtimeSTTService(
@@ -188,24 +139,18 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     )
     user_aggregator, assistant_aggregator = context_aggregator
 
-    # -- Latency & Menu Sync observers --------------------------------------
-    pre_obs = LatencyObserver(tracker, name="latency-pre")
-    mid_obs = LatencyObserver(tracker, name="latency-mid")
-    post_obs = LatencyObserver(tracker, name="latency-post")
+    # -- Real-time Menu Sync Observer --------------------------------------
     menu_sync = MenuSyncProcessor(name="menu-sync-processor")
 
     # -- Pipeline assembly -------------------------------------------------
     pipeline = Pipeline(
         [
             transport.input(),
-            pre_obs,               # catches UserStoppedSpeakingFrame + TranscriptionFrame
             stt,
             user_aggregator,
-            mid_obs,
             llm,
             menu_sync,             # catches LLMTextFrames & synchronises kiosk UI live
             tts,
-            post_obs,              # catches AudioRawFrame (synthesised audio)
             transport.output(),
             assistant_aggregator,
         ]
