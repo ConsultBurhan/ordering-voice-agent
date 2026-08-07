@@ -610,6 +610,75 @@ body {
   border: 1px solid rgba(214, 35, 0, 0.2);
 }
 
+/* Product Customizations & Modifiers */
+.product-customizations-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(80, 35, 20, 0.1);
+  padding-top: 14px;
+}
+
+.customizations-section-title {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--bk-brown);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.customization-group-card {
+  background: var(--bk-bg-light);
+  border: 1px solid rgba(80, 35, 20, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.customization-group-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--bk-red);
+}
+
+.customization-choices-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.choice-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #FFFFFF;
+  border: 1px solid rgba(80, 35, 20, 0.12);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--bk-brown);
+}
+
+.choice-name {
+  font-weight: 600;
+}
+
+.choice-price {
+  font-weight: 700;
+  color: var(--bk-red);
+  font-size: 11px;
+}
+
+.choice-free {
+  font-weight: 700;
+  color: #059669;
+  font-size: 11px;
+}
+
 .product-img {
   width: 100%;
   height: 120px;

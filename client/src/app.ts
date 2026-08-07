@@ -29,6 +29,7 @@ interface MenuItem {
   image_url: string;
   allergens?: string[];
   calories?: number;
+  customizations?: CustomizationGroup[];
 }
 
 interface CustomizationChoice {
@@ -277,7 +278,77 @@ class VoiceOrderingKioskApp {
           image_url: 'https://lsm.koutfood.com/Content/img/Menu/WhatsApp/2_0/248284.jpg',
         },
       ],
-      customizations: {},
+      customizations: {
+        'Spicy Crispy Fillet Meal': [
+          {
+            option: 'Meal Size Upgrade',
+            choices: [
+              { name: 'Go Mega', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Go King', extra_price: 0.2, formatted_price: 'KWD 0.200' },
+            ],
+          },
+          {
+            option: 'Side Selection',
+            choices: [
+              { name: 'Fries', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Curly Fries', extra_price: 0.15, formatted_price: 'KWD 0.150' },
+              { name: 'Onion Rings', extra_price: 0.15, formatted_price: 'KWD 0.150' },
+              { name: 'Chili Loaded Fries', extra_price: 0.5, formatted_price: 'KWD 0.500' },
+            ],
+          },
+          {
+            option: 'Drink Selection',
+            choices: [
+              { name: 'Coca Cola', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Coca Cola Zero', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Fanta', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Sprite', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Classic Mojito', extra_price: 0.25, formatted_price: 'KWD 0.250' },
+            ],
+          },
+          {
+            option: 'Sauces',
+            choices: [
+              { name: 'BBQ Sauce', extra_price: 0.1, formatted_price: 'KWD 0.100' },
+              { name: 'Garlic Mayonaisse Sauce', extra_price: 0.1, formatted_price: 'KWD 0.100' },
+              { name: 'Chipotle Ranch Sauce', extra_price: 0.15, formatted_price: 'KWD 0.150' },
+            ],
+          },
+        ],
+        'Chicken Royale Meal': [
+          {
+            option: 'Meal Size Upgrade',
+            choices: [
+              { name: 'Go Mega', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Go King', extra_price: 0.2, formatted_price: 'KWD 0.200' },
+            ],
+          },
+          {
+            option: 'Side Selection',
+            choices: [
+              { name: 'Fries', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Curly Fries', extra_price: 0.15, formatted_price: 'KWD 0.150' },
+            ],
+          },
+          {
+            option: 'Drink Selection',
+            choices: [
+              { name: 'Coca Cola', extra_price: 0, formatted_price: 'KWD 0.000' },
+              { name: 'Sprite', extra_price: 0, formatted_price: 'KWD 0.000' },
+            ],
+          },
+        ],
+        'Chicken Fries': [
+          {
+            option: 'Dipping Sauces',
+            choices: [
+              { name: 'BBQ Sauce', extra_price: 0.1, formatted_price: 'KWD 0.100' },
+              { name: 'Garlic Mayonaisse Sauce', extra_price: 0.1, formatted_price: 'KWD 0.100' },
+              { name: 'Fiery Sauce', extra_price: 0.1, formatted_price: 'KWD 0.100' },
+            ],
+          },
+        ],
+      },
     };
 
     this.renderCategoriesView();
@@ -398,6 +469,45 @@ class VoiceOrderingKioskApp {
     const allergensHtml = (item.allergens || []).map((a) => `<span class="meta-chip">⚠️ Contains ${a}</span>`).join('');
     const caloriesHtml = item.calories ? `<span class="meta-chip">🔥 ${item.calories} Calories</span>` : '';
 
+    const customizations =
+      (item.customizations && item.customizations.length > 0
+        ? item.customizations
+        : this.menuData?.customizations[item.name]) || [];
+    let customizationsHtml = '';
+
+    if (customizations && customizations.length > 0) {
+      customizationsHtml = `
+        <div class="product-customizations-section">
+          <h3 class="customizations-section-title">Available Customizations & Options</h3>
+          ${customizations
+            .map(
+              (group: CustomizationGroup) => `
+            <div class="customization-group-card">
+              <div class="customization-group-title">${group.option}</div>
+              <div class="customization-choices-grid">
+                ${group.choices
+                  .map(
+                    (choice) => `
+                  <div class="choice-pill">
+                    <span class="choice-name">${choice.name}</span>
+                    ${
+                      choice.extra_price > 0
+                        ? `<span class="choice-price">+${choice.formatted_price}</span>`
+                        : `<span class="choice-free">Included</span>`
+                    }
+                  </div>
+                `
+                  )
+                  .join('')}
+              </div>
+            </div>
+          `
+            )
+            .join('')}
+        </div>
+      `;
+    }
+
     this.productDetailContainer.innerHTML = `
       <img class="product-detail-hero" src="${item.image_url}" alt="${item.name}" onerror="this.src='https://lsm.koutfood.com/Content/img/Menu/WhatsApp/2_0/6393.jpg'" />
       <div class="product-detail-header">
@@ -414,6 +524,7 @@ class VoiceOrderingKioskApp {
         ${caloriesHtml}
         ${allergensHtml}
       </div>
+      ${customizationsHtml}
     `;
 
     this.switchStageView('product-detail');

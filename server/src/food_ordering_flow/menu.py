@@ -339,9 +339,15 @@ ITEM_PRICES = {item["name"]: item["price"] for item in MENU_ITEMS}
 
 def get_menu_payload() -> Dict[str, Any]:
     """Return complete menu payload for frontend dynamic rendering."""
+    items_with_customizations = []
+    for item in MENU_ITEMS:
+        item_copy = dict(item)
+        item_copy["customizations"] = CUSTOMIZATIONS.get(item["name"], [])
+        items_with_customizations.append(item_copy)
+
     return {
         "categories": CATEGORIES,
-        "items": MENU_ITEMS,
+        "items": items_with_customizations,
         "customizations": CUSTOMIZATIONS,
     }
 
@@ -377,15 +383,22 @@ def resolve_product(item_name: str) -> Optional[Dict[str, Any]]:
     if not matched:
         # Partial match
         matched = next((i for i in MENU_ITEMS if name_lower in i["name"].lower()), None)
-    return matched
+    if matched:
+        res = dict(matched)
+        res["customizations"] = CUSTOMIZATIONS.get(matched["name"], [])
+        return res
+    return None
 
 
 def get_valid_customizations(item_name: str) -> List[Dict[str, Any]]:
     """Fetch customization options that are valid ONLY for the resolved product."""
-    product = resolve_product(item_name)
-    if not product:
+    name_lower = item_name.lower().strip()
+    matched = next((i for i in MENU_ITEMS if i["name"].lower() == name_lower), None)
+    if not matched:
+        matched = next((i for i in MENU_ITEMS if name_lower in i["name"].lower()), None)
+    if not matched:
         return []
-    return CUSTOMIZATIONS.get(product["name"], [])
+    return CUSTOMIZATIONS.get(matched["name"], [])
 
 
 def calculate_choice_extra_price(item_name: str, choice_name: str) -> float:

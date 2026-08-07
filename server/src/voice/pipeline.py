@@ -68,6 +68,7 @@ from src.voice.latency import LatencyTracker
 from src.food_ordering_flow.menu import get_menu_payload
 from src.food_ordering_flow.nodes import create_welcome_node
 from src.food_ordering_flow.state import initial_state
+from src.voice.menu_sync_processor import MenuSyncProcessor
 
 # Load env vars first so LANGSMITH_* variables are available when configure_pipecat() runs
 load_dotenv(override=True)
@@ -187,10 +188,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     )
     user_aggregator, assistant_aggregator = context_aggregator
 
-    # -- Latency observers -------------------------------------------------
+    # -- Latency & Menu Sync observers --------------------------------------
     pre_obs = LatencyObserver(tracker, name="latency-pre")
     mid_obs = LatencyObserver(tracker, name="latency-mid")
     post_obs = LatencyObserver(tracker, name="latency-post")
+    menu_sync = MenuSyncProcessor(name="menu-sync-processor")
 
     # -- Pipeline assembly -------------------------------------------------
     pipeline = Pipeline(
@@ -199,8 +201,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             pre_obs,               # catches UserStoppedSpeakingFrame + TranscriptionFrame
             stt,
             user_aggregator,
-            mid_obs,               # catches LLMTextFrame (tokens flowing to TTS)
+            mid_obs,
             llm,
+            menu_sync,             # catches LLMTextFrames & synchronises kiosk UI live
             tts,
             post_obs,              # catches AudioRawFrame (synthesised audio)
             transport.output(),
@@ -232,6 +235,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     @worker.rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
         app_logger.info("Pipecat client ready — initialising ordering flow.")
+
+        menu_sync.rtvi = rtvi
+        menu_sync.flow_manager = flow_manager
 
         # Set up fresh session state for this conversation
         flow_manager.state.clear()
