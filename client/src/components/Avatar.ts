@@ -1,3 +1,5 @@
+import bkCrewAvatarUrl from '../bk_crew_avatar.jpg';
+
 export type AvatarState = 'disconnected' | 'connected' | 'user-speaking' | 'processing' | 'bot-speaking' | 'order-success';
 
 export class Avatar {
@@ -27,90 +29,22 @@ export class Avatar {
         <!-- Thinking Halo Ring -->
         <div class="halo-ring"></div>
 
-        <!-- Main Avatar Sphere & Character -->
+        <!-- Main 3D Burger King Crew Member Character Portrait -->
         <div class="avatar-body-container" id="avatar-body">
-          <svg viewBox="0 0 200 200" class="avatar-svg" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <radialGradient id="headGrad" cx="40%" cy="40%" r="60%">
-                <stop offset="0%" stop-color="#818cf8" />
-                <stop offset="60%" stop-color="#4f46e5" />
-                <stop offset="100%" stop-color="#312e81" />
-              </radialGradient>
-              
-              <radialGradient id="listeningGrad" cx="40%" cy="40%" r="60%">
-                <stop offset="0%" stop-color="#fbbf24" />
-                <stop offset="60%" stop-color="#d97706" />
-                <stop offset="100%" stop-color="#78350f" />
-              </radialGradient>
-
-              <radialGradient id="speakingGrad" cx="40%" cy="40%" r="60%">
-                <stop offset="0%" stop-color="#f472b6" />
-                <stop offset="60%" stop-color="#db2777" />
-                <stop offset="100%" stop-color="#831843" />
-              </radialGradient>
-
-              <radialGradient id="successGrad" cx="40%" cy="40%" r="60%">
-                <stop offset="0%" stop-color="#34d399" />
-                <stop offset="60%" stop-color="#059669" />
-                <stop offset="100%" stop-color="#064e3b" />
-              </radialGradient>
-            </defs>
-
-            <!-- Base Head Outer Shape -->
-            <circle cx="100" cy="100" r="75" class="avatar-head-base" />
-
-            <!-- Cheeks Blush -->
-            <circle cx="62" cy="118" r="10" class="blush blush-left" fill="#f43f5e" opacity="0.3" />
-            <circle cx="138" cy="118" r="10" class="blush blush-right" fill="#f43f5e" opacity="0.3" />
-
-            <!-- Left Eye -->
-            <g class="eye eye-left">
-              <ellipse cx="68" cy="90" rx="10" ry="12" fill="#ffffff" />
-              <circle cx="68" cy="90" r="5" class="pupil pupil-left" fill="#0f172a" />
-              <circle cx="70" cy="87" r="2" fill="#ffffff" />
-              <!-- Closed Eye Line -->
-              <path class="eye-closed" d="M 58 90 Q 68 97 78 90" stroke="#94a3b8" stroke-width="3" stroke-linecap="round" fill="none" />
-            </g>
-
-            <!-- Right Eye -->
-            <g class="eye eye-right">
-              <ellipse cx="132" cy="90" rx="10" ry="12" fill="#ffffff" />
-              <circle cx="132" cy="90" r="5" class="pupil pupil-right" fill="#0f172a" />
-              <circle cx="134" cy="87" r="2" fill="#ffffff" />
-              <!-- Closed Eye Line -->
-              <path class="eye-closed" d="M 122 90 Q 132 97 142 90" stroke="#94a3b8" stroke-width="3" stroke-linecap="round" fill="none" />
-            </g>
-
-            <!-- Eyebrows -->
-            <path class="eyebrow eyebrow-left" d="M 58 72 Q 68 68 78 72" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" />
-            <path class="eyebrow eyebrow-right" d="M 122 72 Q 132 68 142 72" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" />
-
-            <!-- Dynamic Animated Mouth -->
-            <g class="mouth-group">
-              <!-- Neutral Smile -->
-              <path class="mouth mouth-smile" d="M 80 122 Q 100 140 120 122" stroke="#ffffff" stroke-width="4" stroke-linecap="round" fill="none" />
-              <!-- Talking Mouth -->
-              <ellipse class="mouth mouth-talk" cx="100" cy="128" rx="12" ry="14" fill="#0f172a" stroke="#ffffff" stroke-width="3" />
-              <!-- Surprised/Listening Mouth -->
-              <circle class="mouth mouth-listen" cx="100" cy="126" r="7" fill="#ffffff" />
-              <!-- Sleeping Mouth -->
-              <path class="mouth mouth-sleep" d="M 88 126 Q 100 131 112 126" stroke="#94a3b8" stroke-width="3" stroke-linecap="round" fill="none" />
-            </g>
-
-            <!-- Animated Arm/Hand Gesture -->
-            <g class="avatar-hand-gesture" id="avatar-hand">
-              <path d="M 155 125 Q 175 110 182 95" stroke="#818cf8" stroke-width="5" stroke-linecap="round" fill="none" />
-              <circle cx="182" cy="93" r="7" fill="#818cf8" />
-              <text x="170" y="80" font-size="18" class="gesture-icon">👍</text>
-            </g>
-          </svg>
+          <div class="crew-avatar-frame">
+            <img src="${bkCrewAvatarUrl}" alt="Burger King Assistant" class="crew-avatar-img" />
+            <div class="avatar-status-glow"></div>
+            <div class="avatar-headset-indicator">
+              <span class="headset-pulse"></span>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- State Caption Badge -->
       <div class="avatar-caption-badge" id="avatar-caption">
         <span class="caption-pulse-dot"></span>
-        <span class="caption-text" id="caption-text">Click Connect to Start</span>
+        <span class="caption-text" id="caption-text">Click "Start Voice Ordering" to talk</span>
       </div>
     `;
 
@@ -126,12 +60,12 @@ export class Avatar {
     this.avatarEl.classList.add(`state-${state}`);
 
     const defaultCaptions: Record<AvatarState, string> = {
-      'disconnected': 'Offline — Click Connect',
-      'connected': 'Order Assistant Ready — Speak into mic',
-      'user-speaking': 'Listening to your order...',
-      'processing': 'Thinking & building order...',
-      'bot-speaking': 'Assistant speaking...',
-      'order-success': 'Item added to order!'
+      'disconnected': 'Offline — Click Start Voice Ordering',
+      'connected': 'BK Voice Bot Ready — Speak into mic',
+      'user-speaking': 'Listening to your request...',
+      'processing': 'Processing your request...',
+      'bot-speaking': 'BK Assistant speaking...',
+      'order-success': 'Got it!'
     };
 
     if (this.stateCaption) {
@@ -141,7 +75,7 @@ export class Avatar {
 
   public triggerSuccessGesture(itemName?: string): void {
     const prevState = this.currentState;
-    this.setState('order-success', itemName ? `Added ${itemName}!` : 'Got it! Added to order!');
+    this.setState('order-success', itemName ? `Showing ${itemName}!` : 'Got it!');
 
     if (this.gestureTimer) {
       window.clearTimeout(this.gestureTimer);

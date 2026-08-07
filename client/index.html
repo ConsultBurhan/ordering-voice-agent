@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Voice Bistro - AI Voice Ordering Kiosk</title>
+    <title>Burger King - AI Voice Ordering Kiosk</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
@@ -14,7 +14,7 @@
       <!-- Top Brand Header -->
       <header class="kiosk-header">
         <div class="brand">
-          <div class="brand-badge-icon">👑</div>
+          <img src="https://upload.wikimedia.org/wikipedia/commons/c/cc/Burger_King_2020.svg" alt="Burger King Logo" class="brand-logo-img" />
           <div class="brand-text">
             <h1 class="brand-title">BURGER KING</h1>
             <span class="brand-sub">AI Voice Drive-Thru & Kiosk Station</span>
@@ -31,11 +31,17 @@
 
       <!-- Main Kiosk Body Layout -->
       <main class="kiosk-main-layout">
-        <!-- Avatar Stage & Controls -->
+        <!-- Left Side: Avatar Stage & Controls -->
         <section class="stage-section">
           <!-- Avatar Center Stage -->
           <div class="avatar-center-stage" id="avatar-container-root">
             <!-- Rendered by Avatar.ts -->
+          </div>
+
+          <!-- Bot Live Subtitle Caption (directly under Bot Avatar) -->
+          <div class="subtitle-caption-box bot-caption-box" id="bot-subtitle-box">
+            <span class="subtitle-speaker-tag bot-tag">👑 BK Assistant</span>
+            <p class="subtitle-text" id="bot-subtitle-text">Click "Start Voice Ordering" to talk to me!</p>
           </div>
 
           <!-- Soundwave Visualizer -->
@@ -62,17 +68,74 @@
             </button>
           </div>
 
-          <!-- Conversation Transcript Box -->
-          <div class="transcript-wrapper">
-            <div class="section-label">
-              <span>Speech & Dialogue Log</span>
+          <!-- User Live Subtitle Caption (directly under Voice Controls) -->
+          <div class="subtitle-caption-box user-caption-box" id="user-subtitle-box">
+            <span class="subtitle-speaker-tag user-tag">🗣️ You</span>
+            <p class="subtitle-text" id="user-subtitle-text">Speak into your microphone...</p>
+          </div>
+        </section>
+
+        <!-- Right Side: Stage-Driven Adaptive Kiosk Screen -->
+        <section class="kiosk-display-section" id="kiosk-display-root">
+          <!-- Active Stage Bar -->
+          <div class="kiosk-stage-header">
+            <div class="stage-pill welcome" id="current-stage-pill">WELCOME STAGE</div>
+            <div class="order-type-pill" id="kiosk-order-type">Dine In</div>
+          </div>
+
+          <!-- 1. Categories View -->
+          <div class="kiosk-view-panel active" id="view-categories">
+            <h2 class="view-title">Menu Categories</h2>
+            <div class="categories-grid" id="categories-container"></div>
+          </div>
+
+          <!-- 2. Products View -->
+          <div class="kiosk-view-panel" id="view-products">
+            <div class="category-tabs" id="category-tabs"></div>
+            <div class="products-grid" id="products-container"></div>
+          </div>
+
+          <!-- Product Detail Page View -->
+          <div class="kiosk-view-panel" id="view-product-detail">
+            <button class="back-btn" id="product-detail-back-btn">← Back to Menu</button>
+            <div class="product-detail-card" id="product-detail-container"></div>
+          </div>
+
+          <!-- 3. Customize Item View -->
+          <div class="kiosk-view-panel" id="view-customize">
+            <div class="customize-hero-card" id="customize-hero"></div>
+            <div class="customize-options-area" id="customize-options-container"></div>
+          </div>
+
+          <!-- 4. Cart Review View -->
+          <div class="kiosk-view-panel" id="view-cart">
+            <h2 class="view-title">Your Cart Items</h2>
+            <div class="cart-items-list" id="cart-items-container"></div>
+          </div>
+
+          <!-- 5. Checkout Summary View -->
+          <div class="kiosk-view-panel" id="view-checkout">
+            <h2 class="view-title">Checkout Order Summary</h2>
+            <div class="checkout-summary-card" id="checkout-summary-container"></div>
+          </div>
+
+          <!-- 6. Payment Terminal View -->
+          <div class="kiosk-view-panel" id="view-payment">
+            <div class="payment-card" id="payment-container"></div>
+          </div>
+
+          <!-- 7. Order Complete View -->
+          <div class="kiosk-view-panel" id="view-complete">
+            <div class="receipt-card" id="complete-container"></div>
+          </div>
+
+          <!-- Kiosk Live Total Summary Bar -->
+          <div class="kiosk-order-footer-bar" id="kiosk-order-footer">
+            <div class="order-footer-info">
+              <span class="footer-item-count" id="footer-item-count">0 items</span>
+              <span class="footer-label">Total Payable:</span>
             </div>
-            <div class="transcript-box" id="transcript-box">
-              <div class="empty-state" id="empty-state">
-                <div class="empty-mic-icon">🎙️</div>
-                <p>Click <strong>"Start Voice Ordering"</strong> and speak your order clearly.</p>
-              </div>
-            </div>
+            <div class="order-footer-total" id="kiosk-footer-total">KWD 0.000</div>
           </div>
         </section>
       </main>

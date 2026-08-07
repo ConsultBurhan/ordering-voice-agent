@@ -5,10 +5,13 @@ Pipeline:
   transport.input() → raw_logger → latency_pre → STT → agg.user() → latency_mid → LLM → TTS → latency_post → transport.output() → agg.assistant()
 
 Services:
-  STT: OpenAI Whisper (streaming transcripts)
-  LLM: Anthropic Claude (streaming tokens)
-  TTS: OpenAI TTS (streaming audio chunks)
+  STT: ElevenLabs Realtime (streaming transcripts)
+  LLM: OpenAI GPT-4o (streaming tokens) with Pipecat Flows tool-calling
+  TTS: ElevenLabs TTS (streaming audio chunks)
   VAD: Silero (barge-in / interruption handling)
+
+Ordering Flow (Pipecat Flows):
+  Welcome → Browse Menu → Customize Item → Cart → Payment → Order Complete
 
 Run:
   uv run python src/voice/pipeline.py
@@ -16,6 +19,7 @@ Run:
 
 import os
 import sys
+import uuid
 from pathlib import Path
 
 # Ensure project root is in sys.path so `config` and `src` are importable
@@ -28,8 +32,8 @@ if str(_project_root) not in sys.path:
 os.environ.setdefault("NLTK_DISABLE_IMPORT_SECURITY", "1")
 
 from dotenv import load_dotenv
-from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.flows import FlowManager
 from pipecat.frames.frames import (
     AudioRawFrame,
     LLMRunFrame,
@@ -45,27 +49,25 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from pipecat.runner.types import RunnerArguments, SmallWebRTCRunnerArguments
+from pipecat.runner.types import RunnerArguments
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
-from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
-from pipecat.services.openai.stt import OpenAISTTService
-from pipecat.services.openai.tts import OpenAITTSService
+from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService, CommitStrategy
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
-from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService, CommitStrategy
-from pipecat.services.elevenlabs.stt import ElevenLabsSTTService
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transports.smallwebrtc.transport import (
     SmallWebRTCTransport,
     TransportParams,
 )
-from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.workers.runner import WorkerRunner
+from langsmith.integrations.pipecat import configure_pipecat, set_thread_id
 from config.logger import get_logger
 from config.settings import get_settings
 from src.voice.latency import LatencyTracker
-from src.voice.system_prompt import SYSTEM_PROMPT
-from langsmith.integrations.pipecat import configure_pipecat, set_thread_id
+from src.food_ordering_flow.menu import get_menu_payload
+from src.food_ordering_flow.nodes import create_welcome_node
+from src.food_ordering_flow.state import initial_state
 
 # Load env vars first so LANGSMITH_* variables are available when configure_pipecat() runs
 load_dotenv(override=True)
@@ -75,7 +77,6 @@ app_logger = get_logger(__name__)
 # Install the LangSmith tracer and span processor once at startup.
 # Each conversation gets its own thread via set_thread_id() inside run_bot().
 configure_pipecat()
-
 
 
 # ---------------------------------------------------------------------------
@@ -124,19 +125,6 @@ class LatencyObserver(FrameProcessor):
 
         await self.push_frame(frame, direction)
 
-# ---------------------------------------------------------------------------
-# Transport params for Pipecat runner
-# ---------------------------------------------------------------------------
-
-# transport_params = {
-#     "websocket": lambda: FastAPIWebsocketParams(
-#         audio_in_enabled=True,
-#         audio_out_enabled=True,
-#         add_wav_header=False,
-#         serializer=ProtobufFrameSerializer(),
-#     ),
-# }
-
 
 # ---------------------------------------------------------------------------
 # Bot entrypoint
@@ -150,7 +138,6 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         transport (BaseTransport): The transport to use for communication.
         runner_args: runner session arguments
     """
-    import uuid
     # A unique ID per conversation — groups all pipeline spans into one LangSmith thread.
     conversation_id = str(uuid.uuid4())
     set_thread_id(conversation_id)
@@ -159,39 +146,30 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     settings = get_settings()
     tracker = LatencyTracker()
 
-    # -- STT (Eleven Labs) -----------------------------------------------
+    # -- STT (ElevenLabs Realtime) -----------------------------------------------
     stt = ElevenLabsRealtimeSTTService(
         api_key=settings.ELEVENLABS_API_KEY,
         language_code="eng",
         commit_strategy=CommitStrategy.VAD,
         include_timestamps=True,
         settings=ElevenLabsRealtimeSTTService.Settings(
-            vad_silence_threshold_secs=0.8,
-            vad_threshold=0.6
+            vad_silence_threshold_secs=0.6,
+            vad_threshold=0.8,
         ),
     )
 
-    # # -- LLM (Anthropic Claude) ---------------------------------------------
-    # llm = AnthropicLLMService(
-    #     api_key=settings.ANTHROPIC_API_KEY,
-    #     settings=AnthropicLLMSettings(
-    #         model=settings.LLM_MODEL,
-    #         system_instruction=SYSTEM_PROMPT,
-    #         max_tokens=256,
-    #     ),
-    # )
+    # -- LLM (OpenAI GPT-4o) with function-calling for Pipecat Flows -------------
     llm = OpenAILLMService(
-    api_key=settings.OPENAI_API_KEY,
-    settings=OpenAILLMService.Settings(
-        model=settings.LLM_MODEL,
-        temperature=0.7,
-        max_tokens=256,
-        frequency_penalty=0.5,
-        system_instruction=SYSTEM_PROMPT
-    ),
-)
+        api_key=settings.OPENAI_API_KEY,
+        settings=OpenAILLMService.Settings(
+            model=settings.LLM_MODEL,
+            temperature=0.7,
+            max_tokens=256,
+            frequency_penalty=0.5,
+        ),
+    )
 
-    # -- TTS (ElevenLabs TTS) --------------------------------------------------
+    # -- TTS (ElevenLabs) --------------------------------------------------
     tts = ElevenLabsTTSService(
         api_key=settings.ELEVENLABS_API_KEY,
         settings=ElevenLabsTTSService.Settings(
@@ -201,12 +179,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     # -- Context / aggregators ---------------------------------------------
     context = LLMContext()
-    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+    context_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(),
         ),
     )
+    user_aggregator, assistant_aggregator = context_aggregator
 
     # -- Latency observers -------------------------------------------------
     pre_obs = LatencyObserver(tracker, name="latency-pre")
@@ -243,19 +222,38 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         enable_turn_tracking=True,
     )
 
+    # -- Pipecat Flows (ordering flow graph) --------------------------------
+    flow_manager = FlowManager(
+        llm=llm,
+        context_aggregator=context_aggregator,
+        worker=worker,
+    )
+
     @worker.rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
-        app_logger.info("Pipecat client ready.")
-        context.add_message(
-            {"role": "developer", "content": "Start by introducing yourself."}
-        )
-        await worker.queue_frames([LLMRunFrame()])
+        app_logger.info("Pipecat client ready — initialising ordering flow.")
+
+        # Set up fresh session state for this conversation
+        flow_manager.state.clear()
+        flow_manager.state.update(initial_state(session_id=conversation_id))
+
+        # Start at the Welcome node
+        await flow_manager.initialize(await create_welcome_node())
+
+        # Push initial menu payload and initial state to web client
+        try:
+            await rtvi.send_server_message({
+                "type": "init_menu_payload",
+                "menu": get_menu_payload(),
+                "state": flow_manager.state,
+            })
+        except Exception as e:
+            app_logger.warning(f"Could not send init menu payload: {e}")
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         app_logger.info("Pipecat Client connected")
-      
-      
+
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         app_logger.info("Pipecat Client disconnected — cancelling worker")
@@ -280,4 +278,3 @@ async def bot(runner_args: RunnerArguments):
         ),
     )
     await run_bot(transport, runner_args)
-
