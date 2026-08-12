@@ -23,10 +23,9 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEY: str = ""
 
     # Voice Agent Models
-    STT_MODEL: str = "whisper-1"
-    # LLM_MODEL: str = "claude-haiku-4-5"
-    LLM_MODEL: str = "gpt-4o"
-    TTS_MODEL: str = "tts-1"
+    STT_MODEL: str = "scribe_v2_realtime"
+    LLM_MODEL: str = "claude-haiku-4-5"
+    TTS_MODEL: str = "eleven_flash_v2"
     TTS_VOICE: str = "alloy"
 
     # LangSmith Tracing

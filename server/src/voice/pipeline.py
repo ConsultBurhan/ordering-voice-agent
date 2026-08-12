@@ -1,17 +1,17 @@
 """
-Pipecat pipeline using the single LLMContextWorker FoodOrderingWorker agent.
+Pipecat voice pipeline for the Food Ordering Kiosk Agent using PipelineWorker.
 
 Pipeline:
   transport.input() → STT → agg.user() → LLM → menu_sync → TTS → transport.output() → agg.assistant()
 
 Services:
   STT: ElevenLabs Realtime (streaming transcripts)
-  LLM: OpenAI GPT-4o (streaming tokens) with direct @tool function calling
+  LLM: Anthropic Claude (AnthropicLLMService) with direct @tool_options function calling & prompt caching
   TTS: ElevenLabs TTS (streaming audio chunks)
   VAD: Silero (barge-in / interruption handling)
 
 Run:
-  uv run python src/voice/pipeline.py
+  uv run python main.py
 """
 
 import os
@@ -28,6 +28,7 @@ if str(_project_root) not in sys.path:
 os.environ.setdefault("NLTK_DISABLE_IMPORT_SECURITY", "1")
 
 from dotenv import load_dotenv
+from pipecat.audio.filters.rnnoise_filter import RNNoiseFilter
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
@@ -39,7 +40,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.runner.types import RunnerArguments
 from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService, CommitStrategy
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
-from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.anthropic.llm import AnthropicLLMService
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import (
@@ -72,9 +73,9 @@ configure_pipecat()
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
-    """Run the single LLMContextWorker voice agent with transport.
+    """Run the voice agent pipeline with PipelineWorker and AnthropicLLMService.
 
-    Args:
+    Args:lec
         transport (BaseTransport): The transport to use for communication.
         runner_args: runner session arguments
     """
@@ -91,28 +92,29 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         commit_strategy=CommitStrategy.VAD,
         include_timestamps=True,
         settings=ElevenLabsRealtimeSTTService.Settings(
+            model=settings.STT_MODEL,
             vad_silence_threshold_secs=0.7,
             vad_threshold=0.8,
         ),
     )
 
-    # -- LLM (OpenAI GPT-4o) -----------------------------------------------------
-    llm = OpenAILLMService(
-        api_key=settings.OPENAI_API_KEY,
-        system_instruction=SYSTEM_PROMPT,
-        settings=OpenAILLMService.Settings(
+    # -- LLM (claude haiku 4.5) -----------------------------------------------------
+    llm = AnthropicLLMService(
+        api_key=settings.ANTHROPIC_API_KEY,
+        settings=AnthropicLLMService.Settings(
             model=settings.LLM_MODEL,
+            enable_prompt_caching=True,
             temperature=0.7,
             max_tokens=256,
-            frequency_penalty=0.5,
         ),
     )
+    
 
     # -- TTS (ElevenLabs) -------------------------------------------------------
     tts = ElevenLabsTTSService(
         api_key=settings.ELEVENLABS_API_KEY,
         settings=ElevenLabsTTSService.Settings(
-            model="eleven_flash_v2",
+            model=settings.TTS_MODEL,
             voice="21m00Tcm4TlvDq8ikWAM",
         ),  # Rachel
     )
@@ -122,15 +124,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     # -- LLM Context & Aggregators ---------------------------------------------
     context = LLMContext(
+        messages=[{"role": "system", "content": SYSTEM_PROMPT}],
         tools=ALL_TOOLS,
     )
     vad = SileroVADAnalyzer(
-        params=VADParams(
-            confidence=0.85,
-            start_secs=0.4,
-            stop_secs=0.7,
-            min_volume=0.8,
-        )
+        # params=VADParams(
+        #     confidence=0.7,
+        #     start_secs=0.4,
+        #     stop_secs=0.6,
+        #     min_volume=0.5,
+        # )
     )
 
     context_aggregator = LLMContextAggregatorPair(
@@ -220,7 +223,12 @@ async def bot(runner_args: RunnerArguments):
         webrtc_connection=webrtc_connection,
         params=TransportParams(
             audio_in_enabled=True,
+            audio_in_sample_rate=16000,
+            audio_in_filter=RNNoiseFilter(),
             audio_out_enabled=True,
+            audio_out_sample_rate=24000,
+            audio_out_bitrate=64000,
+            audio_out_end_silence_secs=1,
         ),
     )
     await run_bot(transport, runner_args)
